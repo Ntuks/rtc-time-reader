@@ -9,45 +9,16 @@
 */
 
 #include <wiringPi.h>
-#include <wiringPiI2C.h>
-#include <softPwm.h>
 #include <stdio.h>  	    // For printf functions
 #include <stdlib.h>         // For system functions
 #include <signal.h> 	    // For catching interrupt and aborts
-#include <math.h> 	    // For pow function
 
 #include "BinClock.h"
 #include "CurrentTime.h"
 
 //Global variables
-int hours, mins, secs;
 long lastInterruptTime = 0; // Used for button debounce
-int RTC;                    // Holds the RTC instance
 int HH,MM,SS;
-
-void initGPIO(void){
-	/*
-	 * Sets GPIO using wiringPi pins. see pinout.xyz for specific wiringPi pins
-	 * You can also use "gpio readall" in the command line to get the pins
-	 * Note: wiringPi does not use GPIO or board pin numbers (unless specifically set to that mode)
-	 */
-	printf("Setting up\n");
-	wiringPiSetup(); //This is the default mode. If you want to change pinouts, be aware
-
-	RTC = wiringPiI2CSetup(RTCAddr); // setting up RTC
-
-	//Set up the Buttons
-	for(int j; j < sizeof(BTNS)/sizeof(BTNS[0]); j++){
-		pinMode(BTNS[j], INPUT);
-		pullUpDnControl(BTNS[j], PUD_UP);
-	}
-
-	// Attaching  interrupts to Buttons
-//	wiringPiISR(BTNS[0], INT_EDGE_RISING, &hourInc);
-//	wiringPiISR(BTNS[1], INT_EDGE_FALLING, &minInc);
-	printf("Setup done\n");
-}
-
 
 /*
  * The main function
@@ -55,22 +26,17 @@ void initGPIO(void){
  */
 int main(void){
 
-	initGPIO();
-
-	// register signal SIGINT and signal handler
-   	signal(SIGINT, signalHandler);
-
+	printf("Setting up\n");
+	wiringPiSetup(); //This is the default mode. If you want to change pinouts, be aware
+	printf("Setup done\n");
+	
 	// Repeat this until we shut down
 	for (;;){
-
-		toggleTime();
 		//Fetch the time from the RTC
-		hours = wiringPiI2CReadReg8(RTC, HOUR);
-		mins = wiringPiI2CReadReg8(RTC, MIN);
-		secs = wiringPiI2CReadReg8(RTC, SEC) - 0b10000000;
+		toggleTime();
 
 		// Print out the time we have stored on our RTC
-		printf("The current time is: %x:%x:%x\n", hours , mins, secs);
+		printf("The current time is: %x:%x:%x\n", HH , MM, SS);
 
 		// using a delay to make our program "less CPU hungry"
 		delay(1000); //milliseconds
@@ -151,35 +117,11 @@ void toggleTime(void){
 	long interruptTime = millis();
 
 	if (interruptTime - lastInterruptTime > 500){
-		HH = getHours();
-		MM = getMins();
-		SS = getSecs();
-
-		HH = decCompensation(HH);
-		wiringPiI2CWriteReg8(RTC, HOUR, HH);
-
-		MM = decCompensation(MM);
-		wiringPiI2CWriteReg8(RTC, MIN, MM);
-
-		SS = decCompensation(SS);
-		wiringPiI2CWriteReg8(RTC, SEC, 0b10000000+SS);
-
+		HH = decCompensation(getHours());
+		MM = decCompensation(getMins());
+		SS = decCompensation(getSecs());
 	}
 	lastInterruptTime = interruptTime;
-}
-
-/*
- * cleanUp
- * This function makes sure that all the output pins are set to zero when the program exits - or 
- * gets interrupted.
- */
-void cleanUp(){
-	printf("Interrupt signal received.\n");
-	for(int i = 0; i < 10; i++){
-		printf("Cleaning BUTTONS...\n");
-		digitalWrite(BTNS[i], LOW);
-	    pinMode(BTNS[i], INPUT);
-	}  
 }
 
 /*
@@ -187,7 +129,7 @@ void cleanUp(){
  * This function handles any KeyBoardInterrupts.
  */
 void signalHandler(int signum) {
-	cleanUp();
+	printf("Interrupt signal received.\n");
 	exit(signum);
 }
 
